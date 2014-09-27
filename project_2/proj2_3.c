@@ -1,8 +1,7 @@
 /*
-This part of the lab used the concept from the previous section to 
-provide the C Language implementation print an entire string to HyperTerminal by 
-outputting one character at a time to the screen using the OUTA_UART() function provided 
-in the lab manual.
+The purpose of this program was to provide the C Language implementation to toggle the 
+Green and Yellow LEDs of the MSP430 upon pressing the 'G' and 'Y' characters on the 
+keyboard.
 */
 //---------------------------------------------------------------
 // Console I/O through the on board UART for MSP 430X4XXX
@@ -11,6 +10,7 @@ in the lab manual.
 	void OUTA_UART(unsigned char A);
 	unsigned char INCHAR_UART(void);
 	void printStr(char *str);
+	void toggleLED();
 
 	#include "msp430fg4618.h"
 	#include "stdio.h"
@@ -18,24 +18,35 @@ in the lab manual.
 
 	int main(void){
 		volatile unsigned char a;
-		volatile unsigned int i; // volatile to prevent optimization
-		WDTCTL = WDTPW + WDTHOLD; // Stop watchdog timer
+		volatile unsigned int i; 	// volatile to prevent optimization
+		WDTCTL = WDTPW + WDTHOLD; 	// Stop watchdog timer
 		Init_UART();
-		char *str = "Laboratory #2 for EEL4742 Embedded Systems";
 
-		printStr(str);
-
-		// go blink the light to indicate code is running
-		P2DIR |= 0x02; // Set P1.0 to output direction
-		// Use The LED as an indicator
-		for (;;){
-		P2OUT ^= 0x02; // Toggle P1.0 using exclusive-OR
-		i = 10000; // SW Delay
+		// Make green and yellow outputs
+		P2DIR |= 0x06; 	// Set P1.0 to output direction
+						// Use The LED as an indicator
 
 
-		do i--;
-		while (i != 0);
-	}
+
+		P2OUT = 0x00; 		//Start with Green and Yellow LEDs off
+
+		for (;;)			//Run for ever
+			toogleLED();
+
+}
+
+void toggleLED(){
+
+	char a;
+	a = INCHAR_UART();	//Receive from user
+	OUTA_UART(a);		//Echo character to the hyper terminal
+
+	if ( a == 'G') 		//If user enters G then toggle the green LED
+		P2OUT ^= 0x04;
+	else if ( a == 'Y')	//If user enters Y then toggle the yellow LED
+		P2OUT ^= 0x02;
+	else
+		;//Stay the same
 }
 
 void printStr(char *str)
@@ -128,3 +139,4 @@ void Init_UART(void){
 	// UCA0RXBUF 8 bit receiver buffer
 	// UCA0TXBUF 8 bit transmit buffer
 }
+
