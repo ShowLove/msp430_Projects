@@ -1,7 +1,9 @@
 /*
-The purpose of this program was to provide the C Language implementation to toggle the 
-Green and Yellow LEDs of the MSP430 upon pressing the 'G' and 'Y' characters on the keyboard.
+The purpose of this program is to provide a C Language implementation to read in the 
+state of the switches into the MSP430 and to output a conditional string that describes 
+the state of the switches to HyperTerminal.
 */
+
 //---------------------------------------------------------------
 // Console I/O through the on board UART for MSP 430X4XXX
 //---------------------------------------------------------------
@@ -10,6 +12,7 @@ Green and Yellow LEDs of the MSP430 upon pressing the 'G' and 'Y' characters on 
 	unsigned char INCHAR_UART(void);
 	void printStr(char *str);
 	void toggleLED();
+	void displaySW();
 
 	#include "msp430fg4618.h"
 	#include "stdio.h"
@@ -29,12 +32,33 @@ Green and Yellow LEDs of the MSP430 upon pressing the 'G' and 'Y' characters on 
 
 		P2OUT = 0x00; 		//Start with Green and Yellow LEDs off
 
-		for (;;)			//Run for ever
-			toogleLED();
+		for (;;)
+		{
+			displaySW();
+
+			i = 1000;
+			while (i > 0)
+				i--;//Delay
+		}
+
 
 }
 
-void toggleLED(){
+void displaySW()
+{
+	int SW1_Val, SW2_Val;
+	char buffer[100];
+
+
+	SW1_Val = (P1IN & 0x01);
+	SW2_Val = (P1IN & 0x02);
+
+	sprintf(buffer, "SW1 = %d, SW2 = %d", SW1_Val != 1, SW2_Val != 2);
+
+	printStr(buffer);
+}
+
+void toogleLED(){
 
 	char a;
 	a = INCHAR_UART();	//Receive from user
@@ -60,7 +84,6 @@ void printStr(char *str)
 		str++;				//move to next character
 	}
 
-	OUTA_UART(0x0A);		//Print carriage return to Terminal
 	OUTA_UART(0x0D);		//Print Newline to Terminal
 }
 
@@ -138,4 +161,3 @@ void Init_UART(void){
 	// UCA0RXBUF 8 bit receiver buffer
 	// UCA0TXBUF 8 bit transmit buffer
 }
-
