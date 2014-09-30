@@ -1,6 +1,6 @@
-/*
-This part of the lab used the concept from the previous section to provide the Assembly Language implementation print an entire string to HyperTerminal by outputting one character at a time to the screen using the OUTA_UART() functions provided in the lab manual.
-*/
+
+;This part of the lab used the concept from the previous section to provide the Assembly Language implementation print an entire string to HyperTerminal by outputting one character at a time to the screen using the OUTA_UART() functions provided in the lab manual.
+
 
 ;****************************************************************
 ; Console I/O through the on board UART for MSP 430X4XXX
