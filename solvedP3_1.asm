@@ -3,7 +3,7 @@
 ;then stores the result in the location result
 
 		.cdecls C, LIST, "msp430g2231.h" 	;requires for launchpad
-		.sect ".system"										;start at 0x200 msp430g2231
+		.sect ".system"				;start at 0x200 msp430g2231
 		; data variables here
 
 in1		.word 	0x0100
@@ -14,14 +14,14 @@ result	.word	0x0000
 
 			;data constants go here
 
-			.sect ".stack"									;placed at the end of memory 0x27e msp430g2231
+			.sect ".stack"			;placed at the end of memory 0x27e msp430g2231
 stk		.word		0x0000
 
 ;-------------------------------------------------------------------------------------
 
 			.text														;program start
-;			.global _STRT										;define entry point	
-STRT	mov.w	#stk, SP									;Initialize end of ram for msp430g2231 launchpad
+;			.global _STRT			;define entry point	
+STRT	mov.w	#stk, SP				;Initialize end of ram for msp430g2231 launchpad
 StopWDT mov.w	#WDTPW_WDTHOLD, &WDTCTL	; stop WDT
 
 ;------------------------------------------------------------------------------------
