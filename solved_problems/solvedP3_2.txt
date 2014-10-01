@@ -1,0 +1,47 @@
+given a.	in1 = 0x0100 	and	in2 = 0x0120
+			b.	in1 = 0x0F00	and	in2 = 0x0F20
+			c. 	in1 = 0x7F00	and	in2 = 0x0100
+			d.	in1 = 0xFFFF	and	in2 = 0x0001
+
+find C,V,N and Z status Flag Bits
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+ANS
+																					V N Z C
+			a.	  0x0100 	+	  0x0120 = 0x0240		0 0 0 0
+			b.	  0x0F00	+	  0x0F20 = 0x1E20		0 0 0 0
+			c. 	  0x7F00	+	  0x0100 = 0x8000		1 1 0 0 
+			d.	  0xFFFF	+	  0x0001 = 0x0000		0 0 1 1
+
