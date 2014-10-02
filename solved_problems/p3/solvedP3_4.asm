@@ -32,8 +32,8 @@ StopWDT mov.w	#WDTPW_WDTHOLD, &WDTCTL	; stop WDT
 			jlo num1
 			sub.b #0x37, r5	;if A-F subtract 0x37
 			jmp lp1
-num1	sub.b #0x30, r5	;if a number subtract 0x30
-lp1		rla.b r5
+num1			sub.b #0x30, r5	;if a number subtract 0x30
+lp1			rla.b r5
 			rla.b r5
 			rla.b r5
 			rla.b r5				;shift to the upper 4 bits
@@ -42,8 +42,8 @@ lp1		rla.b r5
 			jlo num2
 			sub.b #0x37, r5	;if  A-F subtract 0x37
 			jmp lp2
-num2	sub.b #0x30, r5	;if a number subtract 0x30
-lp2		bis.b r5, &hex	;or the lower 4-bits with the upper 4-bits
+num2			sub.b #0x30, r5	;if a number subtract 0x30
+lp2			bis.b r5, &hex	;or the lower 4-bits with the upper 4-bits
 
 
 ed 		jmp		ed													; this is the finish of the code
