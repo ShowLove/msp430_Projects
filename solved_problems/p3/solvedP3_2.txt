@@ -38,7 +38,7 @@ find C,V,N and Z status Flag Bits
 
 
 
-ANS
+ANS											v n z c
 																					V N Z C
 			a.	  0x0100 	+	  0x0120 = 0x0240		0 0 0 0
 			b.	  0x0F00	+	  0x0F20 = 0x1E20		0 0 0 0
