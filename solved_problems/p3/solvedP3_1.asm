@@ -7,8 +7,8 @@
 		; data variables here
 
 in1		.word 	0x0100
-in2		.word		0x0200
-result	.word	0x0000
+in2		.word	0x0200
+result		.word	0x0000
 
 			.sect ".const"
 
