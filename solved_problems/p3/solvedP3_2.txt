@@ -1,4 +1,4 @@
-given a.	in1 = 0x0100 	and	in2 = 0x0120
+given 			a.	in1 = 0x0100 	and	in2 = 0x0120
 			b.	in1 = 0x0F00	and	in2 = 0x0F20
 			c. 	in1 = 0x7F00	and	in2 = 0x0100
 			d.	in1 = 0xFFFF	and	in2 = 0x0001
