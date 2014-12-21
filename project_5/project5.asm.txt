@@ -1,0 +1,562 @@
+;----------------------------------------------------------------------
+; LCD Driver for the for MSP 430X4XXX experimenter board using
+; Softbaugh LCD
+; Davies book pg 259, 260
+; setup a pointer to the area of memory of the TMS430 that points to
+; the segments
+; of the softbaugh LCD LCDM3 = the starting address
+;----------------------------------------------------------------------
+	.cdecls C,LIST,"msp430fg4618.h" ; cdecls tells assembler
+									; to allow
+									; the device header file
+;----------------------------------------------------------------------
+; #LCDM3 is the start of the area of memory of the TMS430 that points
+; to the segments
+; of the softbaugh LCD LCDM3 = the starting address
+; each of the seven segments for each display is store in memory
+; starting at address LCDM3
+; which is the right most seven segment of the LCD
+; The bit order in each byte is
+; dp, E, G, F, D, C, B, A or
+; :, E, G, F, D, C, B, A
+; after the seven segments these memory locations are used to turn on
+; the special characters
+; such as battery status, antenna, f1-f4, etc.
+; there are 7 seven segment displays
+; data area ram starts 0x1100
+;----------------------------------------------------------------------
+; 			the .sect directives are defined in lnk_msp430f4618.cmd
+; 			.sect ".stack" ; data ram for the stack
+; 			.sect ".const" ; data rom for initialized data
+; 			constants
+; 			.sect ".text" ; program rom for code
+; 			.sect ".cinit" ; program rom for global inits
+; 			.sect ".reset" ; MSP430 RESET Vector
+  			.sect ".sysmem" ; data ram for initialized
+; variables
+; there are 11 locations that are needed for the softbaugh LCD
+; only 7 used for the seven segment displays
+LCD_SIZE .byte 11 ; eleven bytes needed by the LCD
+
+;Array to hold the values to write to the LCD (0-F)
+Numbers .byte 0x5f, 0x06, 0x6b, 0x2f, 0x36
+		.byte 0x3d, 0x7d, 0x07, 0x7f, 0x37
+		.byte 0x77, 0x7c, 0x68, 0x6e, 0x79, 0x71
+
+;Array for the User to enter characters
+User_Characters .space 5
+; This is the code area
+; flash begins at address 0x3100
+;----------------------------------------------------------------------
+; Main Code
+;----------------------------------------------------------------------
+		.text ; program start
+		.global _START ; define entry point
+;----------------------------------------------------------------------
+START mov.w #300h,SP 	; Initialize 'x1121
+						; stackpointer
+StopWDT mov.w #WDTPW+WDTHOLD,&WDTCTL ; Stop WDT
+SetupP1 bis.b #04h,&P2DIR ; P2.2 output
+
+	; go initialize the LCD Display and the MSP430 UART
+	call #Init_LCD
+	call #Init_UART
+
+;---------------------GLOBAL REGISTERS-----------------------
+	; R5 points to the beginning memory for the LCD
+	; R12 points to beginning memory for Numbers Array
+	mov.w #LCDM3, R5
+	mov.w #Numbers, R12
+;------------------------------------------------------------
+MainLoop
+
+;---------------Get User Input------------------------------
+getInput ;Get Command from User
+
+	;--------------First Op--------------------------------
+	call #INCHAR_UART ;Get upper char of first op
+	call #OUTA_UART
+	call #ASCII2HEX ;Convert ascii to hex
+	mov.b R4, R8	;Store operand in R8
+	rla.b R8
+	rla.b R8 ;Shift Character we just read 4 times
+	rla.b R8 ;to the left to put it in upper position of byte
+	rla.b R8
+	call #INCHAR_UART ;Get lower char of first op
+	call #OUTA_UART
+	call #ASCII2HEX ;Convert ascii to hex
+	bis.b R4, R8	;Combine upper and lower characters
+	mov.b R8, R6	;Keep copy of first op in R6 to check sign
+	;-------------------------------------------------------
+
+	call #SPACE
+	call #INCHAR_UART ;Get operation Character
+	call #OUTA_UART	  ;Will be either +, /, - , or *
+	mov.b R4, R7	  ;Save our Operation character in R7
+	call #SPACE
+
+	;--------------Second Op--------------------------------
+	call #INCHAR_UART ;Get upper char of first op
+	call #OUTA_UART
+	call #ASCII2HEX ;Convert ascii to hex
+	mov.b R4, R9	;Store operand in R9
+	rla.b R9
+	rla.b R9 ;Shift Character we just read 4 times
+	rla.b R9 ;to the left to put it in upper position of byte
+	rla.b R9
+	call #INCHAR_UART ;Get lower char of first op
+	call #OUTA_UART
+	call #ASCII2HEX ;Convert ascii to hex
+	bis.b R4, R9	;Combine upper and lower characters
+	;-------------------------------------------------------
+;-----------------------------------------------------------
+
+	call #SPACE_EQUAL ;Output ' ' and '=' to HyperTerminal
+;---------------Perform Operation---------------------------
+
+
+	;Parse Operation (operation in User_Characters Array index 2)
+	cmp.b #0x2B, R7 ; Operation = '+' ?
+	jeq add_ops
+	cmp.b #0x2D, R7
+	jeq sub_ops
+	cmp.b #'*', R7
+	jeq mult_ops
+	mov.w #0xDEAD, R8 ;Operation Failed, shown that we're "Dead"
+	jmp op_done
+add_ops
+	mov.b #0x00, 4(R5) ; Clear LCD negative sign if it exists
+	add.w R9, R8 ; Add operands a and b (a = a + b)
+	jmp op_done
+sub_ops
+	cmp.w R9, R8  ;See if we're going to get a negative number
+	jhs positive
+	mov.b #'-', R4 ;If we're gonna get a negative answer, print negative
+	mov.b #0x20, 4(R5) ; ADD LCD negative sign
+	call #OUTA_UART
+positive
+	sub.w R9, R8 ; Subtract operands a and b (a = a - b)
+	jmp op_done
+mult_ops
+	mov.b #0x00, 4(R5) ; Clear LCD negative sign if it exists
+	clr.w R10	;Store product in R10, clear to hold sum
+repeat
+	cmp.w #0x00, R8
+	jeq mult_done
+	add.w R9, R10 ; Add b + b while a > 0
+	dec.b R8 	  ; decrease a by 1
+	jmp repeat    ;Multiply by repeated addition
+mult_done
+	mov.w R10, R8 ;Keep operations consistent by placing result in R8
+op_done 		  ;Arithmetic operation complete here
+	cmp.b R9, R6  ;See if our first operand was larger than the second operand
+	jhs skip	  ;if it wan't bigger, proceed normally
+	inv.w R8	  ;if the the first op was bigger than the second,
+	inc.w R8	  ;Take the 2's complement
+skip
+;------------------------------------------------------------
+	;Display Output to LCD and HyperTerminal
+	call #DISPLAY_HT
+	call #DISPLAY_LCD
+	call #CRLF ;Output Carriage Return and Line Feed
+
+
+
+	jmp MainLoop ;Run Program forever
+
+;----------------------------------------------------------------
+; Display output to LCD Screen
+;----------------------------------------------------------------
+DISPLAY_LCD
+	push.w R11 ;Save value of R11 on Stack
+	push.w R12 ;Save value of R12 on Stack
+
+	mov.w #Numbers, R12 ;Get Base address of LCD Segment Numbers
+	;-------------------First Digit-------------------------------
+	mov.b R8, R11 	 	;move lower byte of result into R11
+	push.w  R11		 	;save R11 for a second
+	and.b #0x0F, R11 	;move only first four bits of b into LCDSEG
+	add.w R12, R11	 	;Add offset to base address of numbers array
+	mov.b 0(R11), 0(R5) ;R5 has address of LCDSeg[0], R11 has Numbers[Value]
+	pop.w R11		 	;Replace R11
+	;------------------------------------------------------------
+
+	;-------------------Second Digit-------------------------------
+	push.w R11				;Save R11
+	rra.w R11
+	rra.w R11			;Shift R11 four times to the right to get
+	rra.w R11			;second hex Digit
+	rra.w R11
+	and.w #0x000F, R11 	;Get only one character
+	add.w R12, R11	 	;Add offset to base address of numbers array
+	mov.b 0(R11), 1(R5)	;print second LCDSEG
+	pop.w R11				;Replace R11
+	;------------------------------------------------------------
+
+	mov.w R8, R11		;Move upper chars into R11
+	;-------------------Third Digit------------------------------
+	push.w R11			;Save R11
+	swpb R11			;Get third character
+	and.w #0x000F, R11 	;Get only one character
+	add.w R12, R11	 	;Add offset to base address of numbers array
+	mov.b 0(R11), 2(R5)	;print second LCDSEG
+	pop.w R11			;Replace R11
+	;------------------------------------------------------------
+
+	;-------------------Fourth Digit-----------------------------
+	swpb R11			;Get bring fourth character closer to us
+	rra.w R11
+	rra.w R11			;Shift R11 four times to the right to get
+	rra.w R11			;fourth hex Digit
+	rra.w R11
+	and.w #0x000F, R11 	;Get only one character
+	add.w R12, R11	 	;Add offset to base address of numbers array
+	mov.b 0(R11), 3(R5)	;print second LCDSEG
+	;------------------------------------------------------------
+
+	cmp.w R9, R6 ;Check if we should remove '-'
+	jlo negative
+	mov.b #0x00, 4(R5) ; Clear LCD negative sign if it exists
+negative
+Exit_LCD_Display
+	pop.w R12	;Replace value of R12 from stack
+	pop.w R11	;Replace value of R11 from stack
+	ret
+;----------------------------------------------------------------
+
+
+;----------------------------------------------------------------
+; Display output to HyperTerminal (Value passed in Register R9)
+;----------------------------------------------------------------
+DISPLAY_HT
+	push.w R5 ;Save value of R5 on Stack
+
+	mov.w R8, R5 ;Move arirthmetic Result into R5 to be printed by OUT4
+	call #OUT4	 ;Print Value to Screen
+
+	pop.w R5 ;Replace R5 from stack
+	ret
+;----------------------------------------------------------------
+
+;-------------------------------------------------------------------------------
+; Print the HEX Value in R4 to the screen (4 characters)
+;-------------------------------------------------------------------------------
+OUT4
+	push.w R5 ;Push the value of R5 on the stack twice so we can replace the
+	push.w R5 ;original value after printing the upper byte
+
+	swpb R5 ;We want to print the upper byte of R5 first because that has the
+			;first two hex characters
+	and.w #0x00FF, R5 ;Just need the lower byte of R5 for the OUT2 subroutine
+	call #OUT2 		  ;Print upper two hex characters to the Screen
+
+	pop.w R5 ;Replace original value of R5 from stack, so now the lower byte
+			 ;is back in the lower position of R5
+
+	and.w #0x00FF, R5 ;Just need the lower byte of R5 for the OUT2 subroutine
+	call #OUT2		  ;Print lower two hex characters to the screen
+
+	pop.w R5 	   ;Replace original value of R5 from stack
+	ret
+;-------------------------------------------------------------------------------
+
+;-------------------------------------------------------------------------------
+; Print the HEX Value in R4 to the screen (2 characters only)
+;-------------------------------------------------------------------------------
+OUT2
+	push.w R4 ;Save value of R4 on the stack
+
+	mov.b R5, R4 ;Get HEX value passed in R5
+	rra.b R4
+	rra.b R4 ;Bitshift R4 four times to get upper HEX character
+	rra.b R4
+	rra.b R4
+	and.b #0x0F, R4 ;Only need 4 bits for HEX value
+	call #HEX2ASCII ;Convert Hexadecimal value in R4 to ASCII value
+					; (This subroutine is defined below step 9 at the bottom)
+	call #OUTA_UART ;Print character to Screen
+	mov.b R5, R4 	;Get HEX value passed in R5
+	and.b #0x0F, R4 ;We only want the lower HEX character (4 bits)
+	call #HEX2ASCII ;Convert Hexadecimal value in R4 to ASCII value
+	call #OUTA_UART ;Print Character to screen
+
+	pop.w R4 ;Replace original value of R4 from the stack
+OUT2_exit
+	ret
+;-------------------------------------------------------------------------------
+
+;----------------------------------------------------------------
+;Output a space and Equal to HyperTerminal
+;----------------------------------------------------------------
+SPACE_EQUAL
+	push.w R4
+
+	mov.w #0x20, R4 ;print space
+	call #OUTA_UART
+	mov.w #0x3D, R4 ;print equals
+	call #OUTA_UART
+	mov.w #0x20, R4 ;print space
+	call #OUTA_UART
+
+	pop.w R4
+	ret
+;----------------------------------------------------------------
+
+;----------------------------------------------------------------
+;Print an ASCII space (' ') to HyperTerminal
+;---------------------------------------------------------------
+SPACE
+	push.w R4 ;Save the value of R4 on the Stack
+
+	mov.w #' ', R4  ;R4 = ASCII Space (' ')
+	call  #OUTA_UART ;Print Space to HyperTerminal
+
+	pop.w R4 ; Replace value of R4 from stack
+	ret
+;----------------------------------------------------------------
+
+;----------------------------------------------------------------
+;Output a Carriage Return and Line Feed to HyperTerminal
+;----------------------------------------------------------------
+CRLF
+	push.w R4
+
+	mov.w #0x0D, R4 ;print CR
+	call #OUTA_UART
+	mov.w #0x0A, R4 ;print LF
+	call #OUTA_UART
+
+	pop.w R4
+	ret
+
+;----------------------------------------------------------------
+
+
+;-------------------------------------------------------------------------------
+;Convert the HEXADECIMAL value in Register R4 to ASCII value
+;-------------------------------------------------------------------------------
+HEX2ASCII
+	cmp.b #0x10, R4 ;Check if value passed is a valid HEX value (0-F)
+	jhs exit_H2A    ;Otherwise Exit subroutine
+	cmp.b #0x0A, R4 ;Check if value is 0-9
+	jlo isNumeric   ;if value is 0-9, go convert to a number
+	add.b #0x37, R4 ;if Hex A-F, convert to ASCII Uppercase character
+	jmp exit_H2A 	;Done with conversion, so exit
+isNumeric
+	add.b #0x30, R4 ;Only need to add 0x30 if value if 0-9
+exit_H2A ;Conversion Complete here
+	ret
+;-------------------------------------------------------------------------------
+
+;-------------------------------------------------------------------------------
+;Convert the ASCII value in Register R4 to HEXADECIMAL value
+;-------------------------------------------------------------------------------
+ASCII2HEX
+	cmp.b #0x67, R4 ;Check if value passed is a valid ASCII HEX value (0-F upper or lower)
+	jhs exit_A2H    ;Otherwise Exit subroutine
+	cmp.b #0x61, R4 ; Check If value passed in R4 is a-f
+	jhs isLower
+	cmp.b #0x47, R4 ;Check if value is invalid (i.e. not A-F or a-f) between 0x47-0x61
+	jhs exit_A2H
+	cmp.b #0x41, R4 ;Check if value is A-F
+	jhs isUpper
+	cmp.b #0x3A, R4 ;Check if value is invalid (i.e. not 0-9 or A-F or a-f) between 0x3A-0x41
+	jhs exit_A2H
+	cmp.b #0x30, R4 ;Check if value is 0-9, if so, continue with conversion. If not, exit
+	jlo exit_A2H
+isNumber
+	sub.b #0x30, R4 ;If value is 0-9, subtract 0x30 to convert to HEX value
+	jmp exit_A2H    ;Done with conversion
+isUpper
+	sub.b #0x37, R4 ;If value is A-F, subtract 0x37 to convert to HEX value
+	jmp exit_A2H    ;Done with conversion
+isLower
+	sub.b #0x57, R4 ;If value if a-f, subtract 0x57 to convert to HEX value
+exit_A2H            ;Conversion Complete here
+	ret
+;-------------------------------------------------------------------------------
+
+;----------------------------------------------------------------
+;Display Character to HyperTerminal
+;----------------------------------------------------------------
+
+OUTA_UART
+;----------------------------------------------------------------
+; prints to the screen the ASCII value stored in register 4 and
+; uses register 5 as a temp value
+;----------------------------------------------------------------
+; IFG2 register (1) = 1 transmit buffer is empty,
+; UCA0TXBUF 8 bit transmit buffer
+; wait for the transmit buffer to be empty before sending the
+; data out
+	push R5
+lpa mov.b &IFG2,R5
+	and.b #0x02,R5
+	cmp.b #0x00,R5
+	jz lpa
+; send the data to the transmit buffer UCA0TXBUF = A;
+	mov.b R4,&UCA0TXBUF
+	pop R5
+	ret
+INCHAR_UART
+;----------------------------------------------------------------
+; returns the ASCII value in register 4
+;----------------------------------------------------------------
+; IFG2 register (0) = 1 receive buffer is full,
+; UCA0RXBUF 8 bit receive buffer
+; wait for the receive buffer is full before getting the data
+	push R5
+lpb mov.b &IFG2,R5
+	and.b #0x01,R5
+	cmp.b #0x00,R5
+	jz lpb
+	mov.b &UCA0RXBUF,R4
+	pop R5
+; go get the char from the receive buffer
+	ret
+
+Init_UART
+;----------------------------------------------------------------
+; Initialization code to set up the uart on the experimenter board to 8 data,
+; 1 stop, no parity, and 9600 baud, polling operation
+;----------------------------------------------------------------
+
+;P2SEL=0x30;
+; transmit and receive to port 2 b its 4 and 5
+	mov.b #0x30,&P2SEL
+; Bits p2.4 transmit and p2.5 receive UCA0CTL0=0
+; 8 data, no parity 1 stop, uart, async
+	mov.b #0x00,&UCA0CTL0
+; (7)=1 (parity), (6)=1 Even, (5)= 0 lsb first,
+; (4)= 0 8 data / 1 7 data, (3) 0 1 stop 1 / 2 stop, (2-1) --
+; UART mode, (0) 0 = async
+; UCA0CTL1= 0x41;
+	mov.b #0x41,&UCA0CTL1
+; select ALK 32768 and put in software reset the UART
+; (7-6) 00 UCLK, 01 ACLK (32768 hz), 10 SMCLK, 11 SMCLK
+; (0) = 1 reset
+;UCA0BR1=0;
+; upper byte of divider clock word
+	mov.b #0x00,&UCA0BR1
+;UCA0BR0=3; ;
+; clock divide from a clock to bit clock 32768/9600 = 3.413
+	mov.b #0x03,&UCA0BR0
+; UCA0BR1:UCA0BR0 two 8 bit reg to from 16 bit clock divider
+; for the baud rate
+;UCA0MCTL=0x06;
+; low frequency mode module 3 modulation pater used for the bit
+; clock
+	mov.b #0x06,&UCA0MCTL
+;UCA0STAT=0;
+; do not loop the transmitter back to the receiver for echoing
+	mov.b #0x00,&UCA0STAT
+; (7) = 1 echo back trans to rec
+; (6) = 1 framing, (5) = 1 overrun, (4) =1 Parity, (3) = 1 break
+; (0) = 2 transmitting or receiving data
+;UCA0CTL1=0x40;
+; take UART out of reset
+	mov.b #0x40,&UCA0CTL1
+;IE2=0;
+; turn transmit interrupts off
+	mov.b #0x00,&IE2
+; (0) = 1 receiver buffer Interrupts enabled
+; (1) = 1 transmit buffer Interrupts enabled
+;----------------------------------------------------------------
+;****************************************************************
+;----------------------------------------------------------------
+; IFG2 register (0) = 1 receiver buffer is full, UCA0RXIFG
+; IFG2 register (1) = 1 transmit buffer is empty, UCA0RXIFG
+; UCA0RXBUF 8 bit receiver buffer, UCA0TXBUF 8 bit transmit
+; buffer
+	ret
+
+;----------------------------------------------------------------------
+; Initialize the LCD system
+;----------------------------------------------------------------------
+Init_LCD
+; Using the LCD A controller for the MSP430fg4618
+; the pins of the LCD are memory mapped onto the mp430F4xxx
+; memory bus and
+; are accessed via LCDSeg[i] array
+; See page 260 of Davie's text
+; LCD_SIZE-4 only gives the 7 segment displays plus DP, and
+; (colons are the same bit setting)
+; LCD_SIZE-4 only gives the 7 segment displays plus DP, and
+; colons: colons / dp
+; Right most seven segment display is at LCDSeg[0];
+; Display format
+; AAA
+; F B
+; X F B
+; GGG
+; X E C
+; E C
+; DP DDD
+; bit order
+; dp, E, G, F, D, C, B, A or
+; :, E, G, F, D, C, B, A
+; initialize the segment memory to zero to clear the LCD
+; writing a zero in the LCD memory location clears turns off
+
+; the LCD segment
+; R6 is a loop counter to cover all of the segments
+; including all special characters
+	mov.b #0x00, R6
+; R5 points to the beginning memory for the LCD
+	mov.w #LCDM3, R5
+; move 0 into R7 to clear the LCD memory
+	mov.b #0x00, R7
+lpt mov.b R7, 0(R5)
+; Increment R5 to point to the next seven segment display
+; Increment R6 for the next count in the loop
+	inc.w R5
+	inc.b R6
+; See if the loop is finished
+	cmp.b LCD_SIZE, R6
+	jnz lpt
+; Port 5 ports 5.2-5.4 are connected to com1,com2,com3 of LCD
+; com0 fixed and already assigned
+; Need to assign com1 - com3 to port5
+; BIT4 | BIT3 |BIT2 = 1 P5.4, P.3, P5.2 = 1
+	mov.b #0x1C, &P5SEL
+; Used the internal voltage for the LCD bit 4 = 0 (VLCDEXT=0)
+; internal bias voltage set to 1/3 of Vcc, charge pump
+; disabled,
+; page 26-25 of MSP430x4xx user manual
+	mov.b #0x00, &LCDAVCTL0
+; LCDS28-LCDS0 pins LCDS0 = lsb and LCDS28 = MSB need
+; LCDS4 through LCDS24
+; from the experimenter board schematic the LCD uses S4-S24,
+; S0-S3 are not used here
+; Only use up to S24 on the LCD 28-31 not needed.
+; Also LCDACTL1 not required since not using S32 - S39
+; Davie's book page 260
+; page 26-23 of MSP430x4xx user manual
+	mov.b #0x7E, &LCDAPCTL0
+; The LCD uses the ACLK as the master clock as the scan
+; rate for the display segments
+; The ACLK has been set to 32768 Hz with the external 327768 Hz
+; crystal
+; Let's use scan frequency of 256 Hz (This is fast enough not
+; to see the display flicker)
+; or a divisor of 128
+; LCDFREQ division(3 bits), LCDMUX (2 bits), LCDSON segments
+; on, Not used, LCDON LCD module on
+; 011 = freq /128, 11 = 4 mux's needed since the display uses
+; for common inputs com0-com3
+; need to turn the LCD on LCDON = 1
+; LCDSON allows the segments to be blanked good for blinking
+; but needs to be on to
+; display the LCD segments LCDSON = 1
+; Bit pattern required = 0111 1101 = 0x7d
+; page 26-22 of MSP430x4xx user manual
+	mov.b #0x7d, &LCDACTL
+	ret
+
+;----------------------------------------------------------------------
+; Interrupt Vectors
+;----------------------------------------------------------------------
+	.sect ".reset" ; MSP430 RESET Vector
+	.short START ;
+.end
+

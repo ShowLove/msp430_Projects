@@ -1,0 +1,1 @@
+The goal of this project is to develop a C language and an assembly language program that adds, subtracts and multiplies two hexadecimal digits. The resulting answer is then displayed on the LCD display of the MSP430FG4618 experimenter board.
